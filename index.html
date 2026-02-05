@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Timer Sport</title>
 
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111">
+
 <style>
 body {
     margin: 0;
@@ -39,7 +42,7 @@ body {
 .buttons {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 25px;
+    margin-bottom: 20px;
 }
 
 .buttons button {
@@ -66,6 +69,10 @@ body {
     background: #34c759;
     color: white;
 }
+
+#pauseControls button {
+    background: #ff9500;
+}
 </style>
 </head>
 
@@ -83,19 +90,25 @@ body {
         <button onclick="setDuration(180)">3:00</button>
     </div>
 
-    <button class="start" onclick="startTimer()">Démarrer / Relancer</button>
+    <button class="start" id="startBtn" onclick="startTimer()">Démarrer</button>
+
+    <div class="buttons" id="pauseControls" style="display:none;">
+        <button onclick="resumeTimer()">Reprendre</button>
+        <button onclick="cancelTimer()">Annuler</button>
+    </div>
 
 </div>
 
 <script>
-let durations = [60, 90, 120, 180];
 let selectedDuration = 120;
 let remainingTime = 120;
 let timer = null;
 let series = 0;
+let isPaused = false;
 let wakeLock = null;
+let audioCtx = null;
 
-// Empêcher la veille écran
+/* ===== Empêcher veille ===== */
 async function keepScreenOn() {
     if ('wakeLock' in navigator) {
         try {
@@ -104,7 +117,6 @@ async function keepScreenOn() {
     }
 }
 
-// Relâcher la veille
 function releaseScreen() {
     if (wakeLock) {
         wakeLock.release();
@@ -112,39 +124,96 @@ function releaseScreen() {
     }
 }
 
+/* ===== Durée ===== */
 function setDuration(seconds) {
-    if (timer) return;
+    if (timer || isPaused) return;
 
     selectedDuration = seconds;
     remainingTime = seconds;
     updateDisplay();
 
-    document.querySelectorAll('.buttons button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.buttons button')
+        .forEach(btn => btn.classList.remove('active'));
     event.target.classList.add('active');
 }
 
+/* ===== Timer ===== */
 function startTimer() {
-    if (timer) clearInterval(timer);
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
 
     remainingTime = selectedDuration;
+    updateDisplay();
+
     series++;
     document.getElementById("series").textContent = series;
 
     keepScreenOn();
 
-    timer = setInterval(() => {
-        if (remainingTime > 0) {
-            remainingTime--;
-            updateDisplay();
-        } else {
-            clearInterval(timer);
-            timer = null;
-            releaseScreen();
-            playFeedback();
-        }
-    }, 1000);
+    document.getElementById("startBtn").textContent = "Pause";
+    document.getElementById("startBtn").onclick = pauseTimer;
+
+    timer = setInterval(tick, 1000);
 }
 
+function tick() {
+    if (remainingTime > 0) {
+        remainingTime--;
+        updateDisplay();
+    } else {
+        endTimer();
+    }
+}
+
+function pauseTimer() {
+    clearInterval(timer);
+    timer = null;
+    isPaused = true;
+
+    document.getElementById("startBtn").style.display = "none";
+    document.getElementById("pauseControls").style.display = "flex";
+}
+
+function resumeTimer() {
+    isPaused = false;
+
+    document.getElementById("pauseControls").style.display = "none";
+    document.getElementById("startBtn").style.display = "block";
+    document.getElementById("startBtn").textContent = "Pause";
+    document.getElementById("startBtn").onclick = pauseTimer;
+
+    timer = setInterval(tick, 1000);
+}
+
+function cancelTimer() {
+    clearInterval(timer);
+    timer = null;
+    isPaused = false;
+
+    remainingTime = selectedDuration;
+    updateDisplay();
+
+    document.getElementById("pauseControls").style.display = "none";
+    document.getElementById("startBtn").style.display = "block";
+    document.getElementById("startBtn").textContent = "Démarrer";
+    document.getElementById("startBtn").onclick = startTimer;
+
+    releaseScreen();
+}
+
+function endTimer() {
+    clearInterval(timer);
+    timer = null;
+
+    document.getElementById("startBtn").textContent = "Démarrer";
+    document.getElementById("startBtn").onclick = startTimer;
+
+    releaseScreen();
+    playFeedback();
+}
+
+/* ===== Affichage ===== */
 function updateDisplay() {
     const min = Math.floor(remainingTime / 60);
     const sec = remainingTime % 60;
@@ -152,29 +221,33 @@ function updateDisplay() {
         String(min).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
 }
 
-// Bip court + vibration
+/* ===== Son + vibration ===== */
 function playFeedback() {
-    // Bip
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    if (audioCtx) {
+        for (let i = 0; i < 3; i++) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
 
-    osc.frequency.value = 1000;
-    gain.gain.value = 0.1;
+            osc.frequency.value = 1000;
+            gain.gain.value = 0.2;
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
 
-    osc.start();
-    setTimeout(() => {
-        osc.stop();
-        ctx.close();
-    }, 300);
-
-    // Vibration
-    if (navigator.vibrate) {
-        navigator.vibrate(200);
+            const start = audioCtx.currentTime + i * 0.4;
+            osc.start(start);
+            osc.stop(start + 0.25);
+        }
     }
+
+    if (navigator.vibrate) {
+        navigator.vibrate([300, 150, 300, 150, 300]);
+    }
+}
+
+/* ===== PWA ===== */
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
 }
 </script>
 </body>
