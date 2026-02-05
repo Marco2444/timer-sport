@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timer Sport</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #111;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+.container {
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+    padding: 20px;
+}
+
+.series {
+    color: #aaa;
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.timer {
+    font-size: 80px;
+    font-weight: bold;
+    margin: 20px 0;
+}
+
+.buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 25px;
+}
+
+.buttons button {
+    flex: 1;
+    margin: 0 5px;
+    padding: 10px;
+    font-size: 16px;
+    border: none;
+    border-radius: 10px;
+    background: #333;
+    color: white;
+}
+
+.buttons button.active {
+    background: #007aff;
+}
+
+.start {
+    width: 100%;
+    padding: 15px;
+    font-size: 22px;
+    border: none;
+    border-radius: 15px;
+    background: #34c759;
+    color: white;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+    <div class="series">Série <span id="series">0</span></div>
+
+    <div class="timer" id="timer">02:00</div>
+
+    <div class="buttons">
+        <button onclick="setDuration(60)">1:00</button>
+        <button onclick="setDuration(90)">1:30</button>
+        <button onclick="setDuration(120)" class="active">2:00</button>
+        <button onclick="setDuration(180)">3:00</button>
+    </div>
+
+    <button class="start" onclick="startTimer()">Démarrer / Relancer</button>
+
+</div>
+
+<script>
+let durations = [60, 90, 120, 180];
+let selectedDuration = 120;
+let remainingTime = 120;
+let timer = null;
+let series = 0;
+let wakeLock = null;
+
+// Empêcher la veille écran
+async function keepScreenOn() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+        } catch {}
+    }
+}
+
+// Relâcher la veille
+function releaseScreen() {
+    if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+    }
+}
+
+function setDuration(seconds) {
+    if (timer) return;
+
+    selectedDuration = seconds;
+    remainingTime = seconds;
+    updateDisplay();
+
+    document.querySelectorAll('.buttons button').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+}
+
+function startTimer() {
+    if (timer) clearInterval(timer);
+
+    remainingTime = selectedDuration;
+    series++;
+    document.getElementById("series").textContent = series;
+
+    keepScreenOn();
+
+    timer = setInterval(() => {
+        if (remainingTime > 0) {
+            remainingTime--;
+            updateDisplay();
+        } else {
+            clearInterval(timer);
+            timer = null;
+            releaseScreen();
+            playFeedback();
+        }
+    }, 1000);
+}
+
+function updateDisplay() {
+    const min = Math.floor(remainingTime / 60);
+    const sec = remainingTime % 60;
+    document.getElementById("timer").textContent =
+        String(min).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
+}
+
+// Bip court + vibration
+function playFeedback() {
+    // Bip
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.frequency.value = 1000;
+    gain.gain.value = 0.1;
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    setTimeout(() => {
+        osc.stop();
+        ctx.close();
+    }, 300);
+
+    // Vibration
+    if (navigator.vibrate) {
+        navigator.vibrate(200);
+    }
+}
+</script>
+</body>
+</html>
