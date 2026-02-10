@@ -120,8 +120,7 @@ select {
 <div class="timer" id="timer">02:00</div>
 <div class="round" id="roundInfo"></div>
 
-<!-- PRESETS -->
-<div class="buttons" id="simpleBtns">
+<div class="buttons">
     <button onclick="setSimple(this,60)">1:00</button>
     <button onclick="setSimple(this,90)">1:30</button>
     <button onclick="setSimple(this,120)" class="active">2:00</button>
@@ -131,7 +130,7 @@ select {
     <button onclick="setSimple(this,180)">3:00</button>
 </div>
 
-<div class="buttons" id="modeBtns">
+<div class="buttons">
     <button onclick="custom(this)">Custom</button>
     <button onclick="interval(this)">Interval</button>
     <button onclick="emom(this)">EMOM</button>
@@ -150,10 +149,13 @@ select {
 <div class="modal" id="picker">
 <div class="modalContent">
     <h3 id="pickerTitle"></h3>
-    <div class="picker">
+    <div class="picker" id="timePicker">
         <select id="min"></select>
         <span>:</span>
         <select id="sec"></select>
+    </div>
+    <div class="picker" id="numberPicker" style="display:none;">
+        <select id="number"></select>
     </div>
     <div class="buttons">
         <button onclick="closePicker()">Annuler</button>
@@ -163,7 +165,6 @@ select {
 </div>
 
 <script>
-/* ===== STATE ===== */
 let mode="SIMPLE";
 let duration=120, remaining=120;
 let timerInterval=null, endTime=null;
@@ -174,7 +175,7 @@ let audio=null, cb=null;
 const timerEl=document.getElementById("timer");
 const roundInfo=document.getElementById("roundInfo");
 
-/* ===== DISPLAY ===== */
+/* DISPLAY */
 function update(){
     const m=Math.floor(remaining/60);
     const s=remaining%60;
@@ -182,7 +183,7 @@ function update(){
         `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-/* ===== AUDIO ===== */
+/* AUDIO */
 function ensureAudio(){
     if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
     if(audio.state==="suspended") audio.resume();
@@ -190,57 +191,53 @@ function ensureAudio(){
 function beep(freq,dur){
     ensureAudio();
     const o=audio.createOscillator(), g=audio.createGain();
-    o.frequency.value=freq; g.gain.value=0.15;
-    o.connect(g); g.connect(audio.destination);
+    o.frequency.value=freq;
+    g.gain.value=0.2;
+    o.connect(g);
+    g.connect(audio.destination);
     o.start();
     o.stop(audio.currentTime+dur);
 }
-function vibrate(p){ navigator.vibrate && navigator.vibrate(p); }
 
-/* ===== ACTIVE ===== */
-function clearActive(){
-    document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
-}
+/* ACTIVE */
 function setActive(btn){
-    clearActive();
+    document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
     btn.classList.add("active");
 }
 
-/* ===== SIMPLE ===== */
+/* SIMPLE */
 function setSimple(btn,sec){
     if(timerInterval) return;
     mode="SIMPLE";
     setActive(btn);
     duration=remaining=sec;
-    status.textContent="Mode SIMPLE";
     roundInfo.textContent="";
     update();
 }
 
-/* ===== CUSTOM ===== */
+/* CUSTOM */
 function custom(btn){
     setActive(btn);
-    openPicker("Temps personnalisé",duration,v=>{
+    openTimePicker("Temps personnalisé",duration,v=>{
         duration=remaining=v;
         update();
     });
 }
 
-/* ===== INTERVAL ===== */
+/* INTERVAL */
 let on=30, off=15;
 function interval(btn){
     setActive(btn);
     mode="INTERVAL";
-    openPicker("Temps ON",on,v=>{
+    openTimePicker("Temps ON",on,v=>{
         on=v;
-        openPicker("Temps OFF",off,v2=>{
+        openTimePicker("Temps OFF",off,v2=>{
             off=v2;
-            openPicker("Nombre de tours",maxRounds*60,v3=>{
-                maxRounds=Math.max(1,Math.floor(v3/60));
+            openNumberPicker("Nombre de tours",1,50,v3=>{
+                maxRounds=v3;
                 round=1;
                 phase="WORK";
                 remaining=on;
-                status.textContent="INTERVAL";
                 roundInfo.textContent=`${round}/${maxRounds}`;
                 update();
             });
@@ -248,21 +245,20 @@ function interval(btn){
     });
 }
 
-/* ===== EMOM ===== */
+/* EMOM */
 let work=40, rest=20;
 function emom(btn){
     setActive(btn);
     mode="EMOM";
-    openPicker("Durée EMOM (min)",maxRounds*60,v=>{
-        maxRounds=Math.floor(v/60);
-        openPicker("Temps effort",work,w=>{
+    openNumberPicker("Durée EMOM (minutes)",1,60,v=>{
+        maxRounds=v;
+        openTimePicker("Temps effort",work,w=>{
             work=w;
-            openPicker("Temps repos",rest,r=>{
+            openTimePicker("Temps repos",rest,r=>{
                 rest=r;
                 round=1;
                 phase="WORK";
                 remaining=work;
-                status.textContent="EMOM";
                 roundInfo.textContent=`${round}/${maxRounds}`;
                 update();
             });
@@ -270,7 +266,7 @@ function emom(btn){
     });
 }
 
-/* ===== TIMER ===== */
+/* TIMER */
 function start(){
     endTime=Date.now()+remaining*1000;
     startBtn.textContent="Pause";
@@ -282,29 +278,23 @@ function tick(){
     update();
     if(remaining>0) return;
 
-    if(mode==="INTERVAL"){
-        phase=phase==="WORK"?"REST":"WORK";
+    if(mode==="INTERVAL"||mode==="EMOM"){
         if(phase==="WORK"){
+            phase="REST";
+            remaining=mode==="INTERVAL"?off:rest;
+            beep(600,0.15);
+        } else {
             round++;
             if(round>maxRounds) return end();
-            remaining=on;
-        } else remaining=off;
+            phase="WORK";
+            remaining=mode==="INTERVAL"?on:work;
+            beep(1200,0.15);
+        }
         roundInfo.textContent=`${round}/${maxRounds}`;
+        endTime=Date.now()+remaining*1000;
+        return;
     }
-
-    if(mode==="EMOM"){
-        phase=phase==="WORK"?"REST":"WORK";
-        if(phase==="WORK"){
-            round++;
-            if(round>maxRounds) return end();
-            remaining=work;
-        } else remaining=rest;
-        roundInfo.textContent=`${round}/${maxRounds}`;
-    }
-
-    endTime=Date.now()+remaining*1000;
-    beep(1200,.25);
-    vibrate(200);
+    end();
 }
 function pause(){
     clearInterval(timerInterval);
@@ -332,32 +322,49 @@ function cancel(){
 function end(){
     clearInterval(timerInterval);
     timerInterval=null;
-    beep(1500,.5);
-    vibrate([300,150,300]);
+    beep(1600,0.08); // bip final court
     startBtn.textContent="Démarrer";
     startBtn.onclick=start;
 }
 
-/* ===== PICKER ===== */
-function openPicker(title,val,callback){
+/* PICKERS */
+function openTimePicker(title,val,callback){
     cb=callback;
     pickerTitle.textContent=title;
+    timePicker.style.display="flex";
+    numberPicker.style.display="none";
     fill(min,0,59,Math.floor(val/60));
     fill(sec,0,59,val%60);
+    picker.style.display="flex";
+}
+function openNumberPicker(title,minV,maxV,callback){
+    cb=callback;
+    pickerTitle.textContent=title;
+    timePicker.style.display="none";
+    numberPicker.style.display="flex";
+    number.innerHTML="";
+    for(let i=minV;i<=maxV;i++){
+        const o=document.createElement("option");
+        o.value=i;
+        o.textContent=i;
+        number.appendChild(o);
+    }
     picker.style.display="flex";
 }
 function fill(sel,a,b,v){
     sel.innerHTML="";
     for(let i=a;i<=b;i++){
         const o=document.createElement("option");
-        o.value=i; o.textContent=String(i).padStart(2,"0");
+        o.value=i;
+        o.textContent=String(i).padStart(2,"0");
         if(i===v) o.selected=true;
         sel.appendChild(o);
     }
 }
 function validatePicker(){
     picker.style.display="none";
-    cb(parseInt(min.value)*60+parseInt(sec.value));
+    if(numberPicker.style.display==="flex") cb(parseInt(number.value));
+    else cb(parseInt(min.value)*60+parseInt(sec.value));
 }
 function closePicker(){ picker.style.display="none"; }
 
