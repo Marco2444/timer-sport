@@ -6,6 +6,7 @@
 <title>Timer Sport</title>
 
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#111">
 
 <style>
@@ -19,59 +20,77 @@ body {
     align-items: center;
     height: 100vh;
 }
-
 .container {
-    text-align: center;
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     padding: 20px;
+    text-align: center;
 }
-
-.series {
-    color: #aaa;
-    font-size: 20px;
-    margin-bottom: 10px;
-}
-
 .timer {
     font-size: 80px;
     font-weight: bold;
-    margin: 20px 0;
+    margin: 15px 0;
 }
-
+.sub {
+    color: #aaa;
+    margin-bottom: 10px;
+}
 .buttons {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 20px;
+    gap: 6px;
+    margin-bottom: 10px;
 }
-
-.buttons button {
+button {
     flex: 1;
-    margin: 0 5px;
     padding: 10px;
-    font-size: 16px;
+    font-size: 15px;
     border: none;
     border-radius: 10px;
     background: #333;
     color: white;
 }
-
-.buttons button.active {
-    background: #007aff;
-}
-
+button.active { background: #007aff; }
 .start {
-    width: 100%;
-    padding: 15px;
-    font-size: 22px;
-    border: none;
-    border-radius: 15px;
     background: #34c759;
-    color: white;
+    font-size: 22px;
+    padding: 14px;
+    border-radius: 14px;
+    margin-top: 10px;
 }
+#pauseControls button { background: #ff9500; }
 
-#pauseControls button {
-    background: #ff9500;
+/* Picker */
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+.modalContent {
+    background: #1c1c1e;
+    padding: 20px;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 320px;
+}
+.picker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin: 20px 0;
+}
+select {
+    background: #111;
+    color: white;
+    font-size: 26px;
+    border: none;
+    height: 120px;
+    width: 80px;
+    text-align: center;
+    -webkit-appearance: none;
 }
 </style>
 </head>
@@ -79,176 +98,238 @@ body {
 <body>
 <div class="container">
 
-    <div class="series">Série <span id="series">0</span></div>
+<div class="sub" id="status">Mode SIMPLE</div>
+<div class="timer" id="timer">02:00</div>
 
-    <div class="timer" id="timer">02:00</div>
+<div class="buttons">
+    <button onclick="setSimple(60)">1:00</button>
+    <button onclick="setSimple(90)">1:30</button>
+    <button onclick="setSimple(120)" class="active">2:00</button>
+    <button onclick="setSimple(150)">2:30</button>
+    <button onclick="setSimple(180)">3:00</button>
+</div>
 
-    <div class="buttons">
-        <button onclick="setDuration(60)">1:00</button>
-        <button onclick="setDuration(90)">1:30</button>
-        <button onclick="setDuration(120)" class="active">2:00</button>
-        <button onclick="setDuration(180)">3:00</button>
-    </div>
+<div class="buttons">
+    <button onclick="custom()">Custom</button>
+    <button onclick="interval()">Interval</button>
+    <button onclick="emom()">EMOM</button>
+</div>
 
-    <button class="start" id="startBtn" onclick="startTimer()">Démarrer</button>
+<button class="start" id="startBtn" onclick="start()">Démarrer</button>
 
-    <div class="buttons" id="pauseControls" style="display:none;">
-        <button onclick="resumeTimer()">Reprendre</button>
-        <button onclick="cancelTimer()">Annuler</button>
-    </div>
+<div class="buttons" id="pauseControls" style="display:none;">
+    <button onclick="resume()">Reprendre</button>
+    <button onclick="cancel()">Annuler</button>
+</div>
 
 </div>
 
+<!-- PICKER -->
+<div class="modal" id="picker">
+<div class="modalContent">
+    <h3 id="pickerTitle"></h3>
+    <div class="picker">
+        <select id="min"></select>
+        <span>:</span>
+        <select id="sec"></select>
+    </div>
+    <div class="buttons">
+        <button onclick="closePicker()">Annuler</button>
+        <button onclick="validatePicker()">OK</button>
+    </div>
+</div>
+</div>
+
 <script>
-let selectedDuration = 120;
-let remainingTime = 120;
-let timer = null;
-let series = 0;
-let isPaused = false;
-let wakeLock = null;
-let audioCtx = null;
+/* ===== CORE ===== */
+let mode="SIMPLE";
+let duration=120, remaining=120;
+let endTime=null;
+let timer=null;
+let paused=false;
+let phase="WORK";
+let round=0, maxRounds=0;
+let audio=null;
+let cb=null;
 
-/* ===== Empêcher veille ===== */
-async function keepScreenOn() {
-    if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-        } catch {}
+/* ===== DISPLAY ===== */
+const timerEl=document.getElementById("timer");
+function update(){
+    const m=Math.floor(remaining/60);
+    const s=remaining%60;
+    timerEl.textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+/* ===== SOUND ===== */
+function beep(freq,dur){
+    if(!audio) audio=new AudioContext();
+    const o=audio.createOscillator(), g=audio.createGain();
+    o.frequency.value=freq; g.gain.value=0.15;
+    o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime+dur);
+}
+function vibrate(p){ navigator.vibrate && navigator.vibrate(p); }
+
+/* ===== SIMPLE ===== */
+function setSimple(sec){
+    if(timer) return;
+    mode="SIMPLE";
+    duration=remaining=sec;
+    status.textContent="Mode SIMPLE";
+    update();
+}
+
+/* ===== CUSTOM ===== */
+function custom(){
+    openPicker("Temps personnalisé",duration,v=>{
+        duration=remaining=v;
+        update();
+    });
+}
+
+/* ===== INTERVAL ===== */
+let on=30, off=15;
+function interval(){
+    mode="INTERVAL";
+    openPicker("Temps ON",on,v=>{
+        on=v;
+        openPicker("Temps OFF",off,v2=>{
+            off=v2;
+            phase="WORK";
+            duration=remaining=on;
+            status.textContent="INTERVAL ON";
+            update();
+        });
+    });
+}
+
+/* ===== EMOM ===== */
+let emomMin=10, work=40, rest=20;
+function emom(){
+    mode="EMOM";
+    openPicker("Durée EMOM (min)",emomMin*60,v=>{
+        emomMin=Math.floor(v/60);
+        openPicker("Temps effort",work,w=>{
+            work=w;
+            openPicker("Temps repos",rest,r=>{
+                rest=r;
+                round=0;
+                maxRounds=emomMin;
+                phase="WORK";
+                duration=remaining=work;
+                status.textContent="EMOM";
+                update();
+            });
+        });
+    });
+}
+
+/* ===== TIMER (HORODATAGE) ===== */
+function start(){
+    if(!audio) audio=new AudioContext();
+    endTime=Date.now()+remaining*1000;
+    startBtn.textContent="Pause";
+    startBtn.onclick=pause;
+    timer=setInterval(tick,500);
+}
+
+function tick(){
+    remaining=Math.max(0,Math.ceil((endTime-Date.now())/1000));
+    update();
+    if(remaining>0) return;
+
+    if(mode==="INTERVAL"){
+        phase=phase==="WORK"?"REST":"WORK";
+        remaining=phase==="WORK"?on:off;
+        endTime=Date.now()+remaining*1000;
+        status.textContent=`INTERVAL ${phase}`;
+        beep(phase==="WORK"?1200:600,.25);
+        vibrate(phase==="WORK"?200:[100,100]);
+        return;
     }
-}
 
-function releaseScreen() {
-    if (wakeLock) {
-        wakeLock.release();
-        wakeLock = null;
-    }
-}
-
-/* ===== Durée ===== */
-function setDuration(seconds) {
-    if (timer || isPaused) return;
-
-    selectedDuration = seconds;
-    remainingTime = seconds;
-    updateDisplay();
-
-    document.querySelectorAll('.buttons button')
-        .forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
-}
-
-/* ===== Timer ===== */
-function startTimer() {
-    if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    }
-
-    remainingTime = selectedDuration;
-    updateDisplay();
-
-    series++;
-    document.getElementById("series").textContent = series;
-
-    keepScreenOn();
-
-    document.getElementById("startBtn").textContent = "Pause";
-    document.getElementById("startBtn").onclick = pauseTimer;
-
-    timer = setInterval(tick, 1000);
-}
-
-function tick() {
-    if (remainingTime > 0) {
-        remainingTime--;
-        updateDisplay();
-    } else {
-        endTimer();
-    }
-}
-
-function pauseTimer() {
-    clearInterval(timer);
-    timer = null;
-    isPaused = true;
-
-    document.getElementById("startBtn").style.display = "none";
-    document.getElementById("pauseControls").style.display = "flex";
-}
-
-function resumeTimer() {
-    isPaused = false;
-
-    document.getElementById("pauseControls").style.display = "none";
-    document.getElementById("startBtn").style.display = "block";
-    document.getElementById("startBtn").textContent = "Pause";
-    document.getElementById("startBtn").onclick = pauseTimer;
-
-    timer = setInterval(tick, 1000);
-}
-
-function cancelTimer() {
-    clearInterval(timer);
-    timer = null;
-    isPaused = false;
-
-    remainingTime = selectedDuration;
-    updateDisplay();
-
-    document.getElementById("pauseControls").style.display = "none";
-    document.getElementById("startBtn").style.display = "block";
-    document.getElementById("startBtn").textContent = "Démarrer";
-    document.getElementById("startBtn").onclick = startTimer;
-
-    releaseScreen();
-}
-
-function endTimer() {
-    clearInterval(timer);
-    timer = null;
-
-    document.getElementById("startBtn").textContent = "Démarrer";
-    document.getElementById("startBtn").onclick = startTimer;
-
-    releaseScreen();
-    playFeedback();
-}
-
-/* ===== Affichage ===== */
-function updateDisplay() {
-    const min = Math.floor(remainingTime / 60);
-    const sec = remainingTime % 60;
-    document.getElementById("timer").textContent =
-        String(min).padStart(2, '0') + ":" + String(sec).padStart(2, '0');
-}
-
-/* ===== Son + vibration ===== */
-function playFeedback() {
-    if (audioCtx) {
-        for (let i = 0; i < 3; i++) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-
-            osc.frequency.value = 1000;
-            gain.gain.value = 0.2;
-
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            const start = audioCtx.currentTime + i * 0.4;
-            osc.start(start);
-            osc.stop(start + 0.25);
+    if(mode==="EMOM"){
+        if(phase==="WORK"){
+            phase="REST";
+            remaining=rest;
+            beep(600,.2);
+        } else {
+            round++;
+            if(round>=maxRounds){ end(); return; }
+            phase="WORK";
+            remaining=work;
+            beep(1200,.3);
         }
+        endTime=Date.now()+remaining*1000;
+        vibrate([200,100,200]);
+        return;
     }
 
-    if (navigator.vibrate) {
-        navigator.vibrate([300, 150, 300, 150, 300]);
+    end();
+}
+
+function pause(){
+    clearInterval(timer); timer=null;
+    paused=true;
+    pauseControls.style.display="flex";
+    startBtn.style.display="none";
+}
+
+function resume(){
+    paused=false;
+    endTime=Date.now()+remaining*1000;
+    pauseControls.style.display="none";
+    startBtn.style.display="block";
+    timer=setInterval(tick,500);
+}
+
+function cancel(){
+    clearInterval(timer); timer=null;
+    remaining=duration;
+    update();
+    pauseControls.style.display="none";
+    startBtn.style.display="block";
+    startBtn.textContent="Démarrer";
+    startBtn.onclick=start;
+}
+
+function end(){
+    clearInterval(timer); timer=null;
+    beep(1400,.5);
+    vibrate([300,150,300]);
+    startBtn.textContent="Démarrer";
+    startBtn.onclick=start;
+}
+
+/* ===== PICKER ===== */
+function openPicker(title,val,callback){
+    cb=callback;
+    pickerTitle.textContent=title;
+    fill(min,0,59,Math.floor(val/60));
+    fill(sec,0,59,val%60);
+    picker.style.display="flex";
+}
+function fill(sel,a,b,v){
+    sel.innerHTML="";
+    for(let i=a;i<=b;i++){
+        const o=document.createElement("option");
+        o.value=i;
+        o.textContent=String(i).padStart(2,"0");
+        if(i===v) o.selected=true;
+        sel.appendChild(o);
     }
 }
+function validatePicker(){
+    picker.style.display="none";
+    cb(parseInt(min.value)*60+parseInt(sec.value));
+}
+function closePicker(){ picker.style.display="none"; }
 
 /* ===== PWA ===== */
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
+if("serviceWorker"in navigator){
+    navigator.serviceWorker.register("sw.js");
 }
 </script>
+
 </body>
 </html>
