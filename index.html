@@ -120,20 +120,17 @@ select {
 <div class="timer" id="timer">02:00</div>
 <div class="round" id="roundInfo"></div>
 
-<!-- PRESETS LIGNE 1 -->
+<!-- PRESETS -->
 <div class="buttons" id="simpleBtns">
     <button onclick="setSimple(this,60)">1:00</button>
     <button onclick="setSimple(this,90)">1:30</button>
     <button onclick="setSimple(this,120)" class="active">2:00</button>
 </div>
-
-<!-- PRESETS LIGNE 2 -->
 <div class="buttons">
     <button onclick="setSimple(this,150)">2:30</button>
     <button onclick="setSimple(this,180)">3:00</button>
 </div>
 
-<!-- MODES -->
 <div class="buttons" id="modeBtns">
     <button onclick="custom(this)">Custom</button>
     <button onclick="interval(this)">Interval</button>
@@ -166,22 +163,26 @@ select {
 </div>
 
 <script>
+/* ===== STATE ===== */
 let mode="SIMPLE";
 let duration=120, remaining=120;
-let timer=null, endTime=null;
+let timerInterval=null, endTime=null;
 let phase="WORK";
 let round=1, maxRounds=1;
 let audio=null, cb=null;
 
+const timerEl=document.getElementById("timer");
 const roundInfo=document.getElementById("roundInfo");
 
+/* ===== DISPLAY ===== */
 function update(){
     const m=Math.floor(remaining/60);
     const s=remaining%60;
-    timer.textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    timerEl.textContent =
+        `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-/* AUDIO SAFE iOS */
+/* ===== AUDIO ===== */
 function ensureAudio(){
     if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
     if(audio.state==="suspended") audio.resume();
@@ -196,7 +197,7 @@ function beep(freq,dur){
 }
 function vibrate(p){ navigator.vibrate && navigator.vibrate(p); }
 
-/* ACTIVE BUTTON */
+/* ===== ACTIVE ===== */
 function clearActive(){
     document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
 }
@@ -205,9 +206,9 @@ function setActive(btn){
     btn.classList.add("active");
 }
 
-/* SIMPLE */
+/* ===== SIMPLE ===== */
 function setSimple(btn,sec){
-    if(timer) return;
+    if(timerInterval) return;
     mode="SIMPLE";
     setActive(btn);
     duration=remaining=sec;
@@ -216,7 +217,7 @@ function setSimple(btn,sec){
     update();
 }
 
-/* CUSTOM */
+/* ===== CUSTOM ===== */
 function custom(btn){
     setActive(btn);
     openPicker("Temps personnalisé",duration,v=>{
@@ -225,7 +226,7 @@ function custom(btn){
     });
 }
 
-/* INTERVAL */
+/* ===== INTERVAL ===== */
 let on=30, off=15;
 function interval(btn){
     setActive(btn);
@@ -247,7 +248,7 @@ function interval(btn){
     });
 }
 
-/* EMOM */
+/* ===== EMOM ===== */
 let work=40, rest=20;
 function emom(btn){
     setActive(btn);
@@ -269,12 +270,12 @@ function emom(btn){
     });
 }
 
-/* TIMER */
+/* ===== TIMER ===== */
 function start(){
     endTime=Date.now()+remaining*1000;
     startBtn.textContent="Pause";
     startBtn.onclick=pause;
-    timer=setInterval(tick,500);
+    timerInterval=setInterval(tick,250);
 }
 function tick(){
     remaining=Math.max(0,Math.ceil((endTime-Date.now())/1000));
@@ -306,7 +307,8 @@ function tick(){
     vibrate(200);
 }
 function pause(){
-    clearInterval(timer); timer=null;
+    clearInterval(timerInterval);
+    timerInterval=null;
     pauseControls.style.display="flex";
     startBtn.style.display="none";
 }
@@ -314,10 +316,11 @@ function resume(){
     endTime=Date.now()+remaining*1000;
     pauseControls.style.display="none";
     startBtn.style.display="block";
-    timer=setInterval(tick,500);
+    timerInterval=setInterval(tick,250);
 }
 function cancel(){
-    clearInterval(timer); timer=null;
+    clearInterval(timerInterval);
+    timerInterval=null;
     remaining=duration;
     roundInfo.textContent="";
     update();
@@ -327,14 +330,15 @@ function cancel(){
     startBtn.onclick=start;
 }
 function end(){
-    clearInterval(timer); timer=null;
+    clearInterval(timerInterval);
+    timerInterval=null;
     beep(1500,.5);
     vibrate([300,150,300]);
     startBtn.textContent="Démarrer";
     startBtn.onclick=start;
 }
 
-/* PICKER */
+/* ===== PICKER ===== */
 function openPicker(title,val,callback){
     cb=callback;
     pickerTitle.textContent=title;
@@ -356,6 +360,8 @@ function validatePicker(){
     cb(parseInt(min.value)*60+parseInt(sec.value));
 }
 function closePicker(){ picker.style.display="none"; }
+
+update();
 </script>
 </body>
 </html>
