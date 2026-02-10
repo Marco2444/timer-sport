@@ -29,37 +29,55 @@ body {
 .timer {
     font-size: 80px;
     font-weight: bold;
-    margin: 15px 0;
 }
 .sub {
     color: #aaa;
+    margin: 8px 0;
+}
+.round {
+    font-size: 18px;
+    color: #0a84ff;
     margin-bottom: 10px;
 }
+
 .buttons {
     display: flex;
-    gap: 6px;
+    gap: 8px;
     margin-bottom: 10px;
 }
 button {
     flex: 1;
-    padding: 10px;
-    font-size: 15px;
+    padding: 16px 8px;
+    font-size: 20px;
     border: none;
-    border-radius: 10px;
+    border-radius: 14px;
     background: #333;
     color: white;
+    white-space: normal;
 }
-button.active { background: #007aff; }
+button.active {
+    background: #007aff;
+}
+
 .start {
     background: #34c759;
-    font-size: 22px;
-    padding: 14px;
-    border-radius: 14px;
-    margin-top: 10px;
+    font-size: 24px;
+    padding: 16px;
+    border-radius: 16px;
+    width: 80%;
+    margin: 15px auto 0;
+    display: block;
 }
-#pauseControls button { background: #ff9500; }
 
-/* Picker */
+#pauseControls {
+    justify-content: center;
+}
+#pauseControls button {
+    background: #ff9500;
+    width: 40%;
+}
+
+/* MODAL */
 .modal {
     position: fixed;
     inset: 0;
@@ -71,21 +89,25 @@ button.active { background: #007aff; }
 .modalContent {
     background: #1c1c1e;
     padding: 20px;
-    border-radius: 16px;
+    border-radius: 18px;
     width: 90%;
     max-width: 320px;
+    text-align: center;
+}
+.modalContent h3 {
+    margin-top: 0;
 }
 .picker {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     margin: 20px 0;
 }
 select {
     background: #111;
     color: white;
-    font-size: 26px;
+    font-size: 28px;
     border: none;
     height: 120px;
     width: 80px;
@@ -100,13 +122,14 @@ select {
 
 <div class="sub" id="status">Mode SIMPLE</div>
 <div class="timer" id="timer">02:00</div>
+<div class="round" id="roundInfo"></div>
 
-<div class="buttons">
-    <button onclick="setSimple(60)">1:00</button>
-    <button onclick="setSimple(90)">1:30</button>
-    <button onclick="setSimple(120)" class="active">2:00</button>
-    <button onclick="setSimple(150)">2:30</button>
-    <button onclick="setSimple(180)">3:00</button>
+<div class="buttons" id="simpleBtns">
+    <button onclick="setSimple(this,60)">1<br>:00</button>
+    <button onclick="setSimple(this,90)">1<br>:30</button>
+    <button onclick="setSimple(this,120)" class="active">2<br>:00</button>
+    <button onclick="setSimple(this,150)">2<br>:30</button>
+    <button onclick="setSimple(this,180)">3<br>:00</button>
 </div>
 
 <div class="buttons">
@@ -141,45 +164,46 @@ select {
 </div>
 
 <script>
-/* ===== CORE ===== */
 let mode="SIMPLE";
 let duration=120, remaining=120;
-let endTime=null;
-let timer=null;
-let paused=false;
+let timer=null, endTime=null;
 let phase="WORK";
-let round=0, maxRounds=0;
-let audio=null;
-let cb=null;
+let round=1, maxRounds=1;
+let audio=null, cb=null;
 
-/* ===== DISPLAY ===== */
-const timerEl=document.getElementById("timer");
+const timerEl=timer;
+const roundInfo=document.getElementById("roundInfo");
+
 function update(){
     const m=Math.floor(remaining/60);
     const s=remaining%60;
-    timerEl.textContent=`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    document.getElementById("timer").textContent =
+        `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-/* ===== SOUND ===== */
-function beep(freq,dur){
+function beep(f,d){
     if(!audio) audio=new AudioContext();
     const o=audio.createOscillator(), g=audio.createGain();
-    o.frequency.value=freq; g.gain.value=0.15;
+    o.frequency.value=f; g.gain.value=0.15;
     o.connect(g); g.connect(audio.destination);
-    o.start(); o.stop(audio.currentTime+dur);
+    o.start(); o.stop(audio.currentTime+d);
 }
 function vibrate(p){ navigator.vibrate && navigator.vibrate(p); }
 
-/* ===== SIMPLE ===== */
-function setSimple(sec){
+/* SIMPLE */
+function setSimple(btn,sec){
     if(timer) return;
     mode="SIMPLE";
     duration=remaining=sec;
     status.textContent="Mode SIMPLE";
+    roundInfo.textContent="";
+    document.querySelectorAll("#simpleBtns button")
+        .forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
     update();
 }
 
-/* ===== CUSTOM ===== */
+/* CUSTOM */
 function custom(){
     openPicker("Temps personnalisé",duration,v=>{
         duration=remaining=v;
@@ -187,7 +211,7 @@ function custom(){
     });
 }
 
-/* ===== INTERVAL ===== */
+/* INTERVAL */
 let on=30, off=15;
 function interval(){
     mode="INTERVAL";
@@ -195,38 +219,42 @@ function interval(){
         on=v;
         openPicker("Temps OFF",off,v2=>{
             off=v2;
-            phase="WORK";
-            duration=remaining=on;
-            status.textContent="INTERVAL ON";
-            update();
-        });
-    });
-}
-
-/* ===== EMOM ===== */
-let emomMin=10, work=40, rest=20;
-function emom(){
-    mode="EMOM";
-    openPicker("Durée EMOM (min)",emomMin*60,v=>{
-        emomMin=Math.floor(v/60);
-        openPicker("Temps effort",work,w=>{
-            work=w;
-            openPicker("Temps repos",rest,r=>{
-                rest=r;
-                round=0;
-                maxRounds=emomMin;
+            openPicker("Nombre de tours",maxRounds*60,v3=>{
+                maxRounds=Math.max(1,Math.floor(v3/60));
+                round=1;
                 phase="WORK";
-                duration=remaining=work;
-                status.textContent="EMOM";
+                remaining=on;
+                status.textContent="INTERVAL";
+                roundInfo.textContent=`Tour ${round}/${maxRounds}`;
                 update();
             });
         });
     });
 }
 
-/* ===== TIMER (HORODATAGE) ===== */
+/* EMOM */
+let work=40, rest=20;
+function emom(){
+    mode="EMOM";
+    openPicker("Durée EMOM (min)",maxRounds*60,v=>{
+        maxRounds=Math.floor(v/60);
+        openPicker("Temps effort",work,w=>{
+            work=w;
+            openPicker("Temps repos",rest,r=>{
+                rest=r;
+                round=1;
+                phase="WORK";
+                remaining=work;
+                status.textContent="EMOM";
+                roundInfo.textContent=`EMOM ${round}/${maxRounds}`;
+                update();
+            });
+        });
+    });
+}
+
+/* TIMER */
 function start(){
-    if(!audio) audio=new AudioContext();
     endTime=Date.now()+remaining*1000;
     startBtn.textContent="Pause";
     startBtn.onclick=pause;
@@ -239,44 +267,37 @@ function tick(){
     if(remaining>0) return;
 
     if(mode==="INTERVAL"){
-        phase=phase==="WORK"?"REST":"WORK";
-        remaining=phase==="WORK"?on:off;
-        endTime=Date.now()+remaining*1000;
-        status.textContent=`INTERVAL ${phase}`;
-        beep(phase==="WORK"?1200:600,.25);
-        vibrate(phase==="WORK"?200:[100,100]);
-        return;
+        if(phase==="WORK"){ phase="REST"; remaining=off; }
+        else {
+            round++;
+            if(round>maxRounds) return end();
+            phase="WORK"; remaining=on;
+        }
+        roundInfo.textContent=`Tour ${round}/${maxRounds}`;
     }
 
     if(mode==="EMOM"){
-        if(phase==="WORK"){
-            phase="REST";
-            remaining=rest;
-            beep(600,.2);
-        } else {
+        if(phase==="WORK"){ phase="REST"; remaining=rest; }
+        else {
             round++;
-            if(round>=maxRounds){ end(); return; }
-            phase="WORK";
-            remaining=work;
-            beep(1200,.3);
+            if(round>maxRounds) return end();
+            phase="WORK"; remaining=work;
         }
-        endTime=Date.now()+remaining*1000;
-        vibrate([200,100,200]);
-        return;
+        roundInfo.textContent=`EMOM ${round}/${maxRounds}`;
     }
 
-    end();
+    endTime=Date.now()+remaining*1000;
+    beep(1200,.25);
+    vibrate(200);
 }
 
 function pause(){
     clearInterval(timer); timer=null;
-    paused=true;
     pauseControls.style.display="flex";
     startBtn.style.display="none";
 }
 
 function resume(){
-    paused=false;
     endTime=Date.now()+remaining*1000;
     pauseControls.style.display="none";
     startBtn.style.display="block";
@@ -286,6 +307,7 @@ function resume(){
 function cancel(){
     clearInterval(timer); timer=null;
     remaining=duration;
+    roundInfo.textContent="";
     update();
     pauseControls.style.display="none";
     startBtn.style.display="block";
@@ -295,13 +317,13 @@ function cancel(){
 
 function end(){
     clearInterval(timer); timer=null;
-    beep(1400,.5);
+    beep(1500,.5);
     vibrate([300,150,300]);
     startBtn.textContent="Démarrer";
     startBtn.onclick=start;
 }
 
-/* ===== PICKER ===== */
+/* PICKER */
 function openPicker(title,val,callback){
     cb=callback;
     pickerTitle.textContent=title;
@@ -313,8 +335,7 @@ function fill(sel,a,b,v){
     sel.innerHTML="";
     for(let i=a;i<=b;i++){
         const o=document.createElement("option");
-        o.value=i;
-        o.textContent=String(i).padStart(2,"0");
+        o.value=i; o.textContent=String(i).padStart(2,"0");
         if(i===v) o.selected=true;
         sel.appendChild(o);
     }
@@ -324,12 +345,6 @@ function validatePicker(){
     cb(parseInt(min.value)*60+parseInt(sec.value));
 }
 function closePicker(){ picker.style.display="none"; }
-
-/* ===== PWA ===== */
-if("serviceWorker"in navigator){
-    navigator.serviceWorker.register("sw.js");
-}
 </script>
-
 </body>
 </html>
