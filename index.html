@@ -43,17 +43,16 @@ body {
 .buttons {
     display: flex;
     gap: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 button {
     flex: 1;
-    padding: 16px 8px;
-    font-size: 20px;
+    padding: 16px;
+    font-size: 18px;
     border: none;
     border-radius: 14px;
     background: #333;
     color: white;
-    white-space: normal;
 }
 button.active {
     background: #007aff;
@@ -94,9 +93,6 @@ button.active {
     max-width: 320px;
     text-align: center;
 }
-.modalContent h3 {
-    margin-top: 0;
-}
 .picker {
     display: flex;
     justify-content: center;
@@ -124,18 +120,24 @@ select {
 <div class="timer" id="timer">02:00</div>
 <div class="round" id="roundInfo"></div>
 
+<!-- PRESETS LIGNE 1 -->
 <div class="buttons" id="simpleBtns">
-    <button onclick="setSimple(this,60)">1<br>:00</button>
-    <button onclick="setSimple(this,90)">1<br>:30</button>
-    <button onclick="setSimple(this,120)" class="active">2<br>:00</button>
-    <button onclick="setSimple(this,150)">2<br>:30</button>
-    <button onclick="setSimple(this,180)">3<br>:00</button>
+    <button onclick="setSimple(this,60)">1:00</button>
+    <button onclick="setSimple(this,90)">1:30</button>
+    <button onclick="setSimple(this,120)" class="active">2:00</button>
 </div>
 
+<!-- PRESETS LIGNE 2 -->
 <div class="buttons">
-    <button onclick="custom()">Custom</button>
-    <button onclick="interval()">Interval</button>
-    <button onclick="emom()">EMOM</button>
+    <button onclick="setSimple(this,150)">2:30</button>
+    <button onclick="setSimple(this,180)">3:00</button>
+</div>
+
+<!-- MODES -->
+<div class="buttons" id="modeBtns">
+    <button onclick="custom(this)">Custom</button>
+    <button onclick="interval(this)">Interval</button>
+    <button onclick="emom(this)">EMOM</button>
 </div>
 
 <button class="start" id="startBtn" onclick="start()">Démarrer</button>
@@ -171,40 +173,52 @@ let phase="WORK";
 let round=1, maxRounds=1;
 let audio=null, cb=null;
 
-const timerEl=timer;
 const roundInfo=document.getElementById("roundInfo");
 
 function update(){
     const m=Math.floor(remaining/60);
     const s=remaining%60;
-    document.getElementById("timer").textContent =
-        `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+    timer.textContent = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-function beep(f,d){
-    if(!audio) audio=new AudioContext();
+/* AUDIO SAFE iOS */
+function ensureAudio(){
+    if(!audio) audio=new (window.AudioContext||window.webkitAudioContext)();
+    if(audio.state==="suspended") audio.resume();
+}
+function beep(freq,dur){
+    ensureAudio();
     const o=audio.createOscillator(), g=audio.createGain();
-    o.frequency.value=f; g.gain.value=0.15;
+    o.frequency.value=freq; g.gain.value=0.15;
     o.connect(g); g.connect(audio.destination);
-    o.start(); o.stop(audio.currentTime+d);
+    o.start();
+    o.stop(audio.currentTime+dur);
 }
 function vibrate(p){ navigator.vibrate && navigator.vibrate(p); }
+
+/* ACTIVE BUTTON */
+function clearActive(){
+    document.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+}
+function setActive(btn){
+    clearActive();
+    btn.classList.add("active");
+}
 
 /* SIMPLE */
 function setSimple(btn,sec){
     if(timer) return;
     mode="SIMPLE";
+    setActive(btn);
     duration=remaining=sec;
     status.textContent="Mode SIMPLE";
     roundInfo.textContent="";
-    document.querySelectorAll("#simpleBtns button")
-        .forEach(b=>b.classList.remove("active"));
-    btn.classList.add("active");
     update();
 }
 
 /* CUSTOM */
-function custom(){
+function custom(btn){
+    setActive(btn);
     openPicker("Temps personnalisé",duration,v=>{
         duration=remaining=v;
         update();
@@ -213,7 +227,8 @@ function custom(){
 
 /* INTERVAL */
 let on=30, off=15;
-function interval(){
+function interval(btn){
+    setActive(btn);
     mode="INTERVAL";
     openPicker("Temps ON",on,v=>{
         on=v;
@@ -225,7 +240,7 @@ function interval(){
                 phase="WORK";
                 remaining=on;
                 status.textContent="INTERVAL";
-                roundInfo.textContent=`Tour ${round}/${maxRounds}`;
+                roundInfo.textContent=`${round}/${maxRounds}`;
                 update();
             });
         });
@@ -234,7 +249,8 @@ function interval(){
 
 /* EMOM */
 let work=40, rest=20;
-function emom(){
+function emom(btn){
+    setActive(btn);
     mode="EMOM";
     openPicker("Durée EMOM (min)",maxRounds*60,v=>{
         maxRounds=Math.floor(v/60);
@@ -246,7 +262,7 @@ function emom(){
                 phase="WORK";
                 remaining=work;
                 status.textContent="EMOM";
-                roundInfo.textContent=`EMOM ${round}/${maxRounds}`;
+                roundInfo.textContent=`${round}/${maxRounds}`;
                 update();
             });
         });
@@ -260,50 +276,46 @@ function start(){
     startBtn.onclick=pause;
     timer=setInterval(tick,500);
 }
-
 function tick(){
     remaining=Math.max(0,Math.ceil((endTime-Date.now())/1000));
     update();
     if(remaining>0) return;
 
     if(mode==="INTERVAL"){
-        if(phase==="WORK"){ phase="REST"; remaining=off; }
-        else {
+        phase=phase==="WORK"?"REST":"WORK";
+        if(phase==="WORK"){
             round++;
             if(round>maxRounds) return end();
-            phase="WORK"; remaining=on;
-        }
-        roundInfo.textContent=`Tour ${round}/${maxRounds}`;
+            remaining=on;
+        } else remaining=off;
+        roundInfo.textContent=`${round}/${maxRounds}`;
     }
 
     if(mode==="EMOM"){
-        if(phase==="WORK"){ phase="REST"; remaining=rest; }
-        else {
+        phase=phase==="WORK"?"REST":"WORK";
+        if(phase==="WORK"){
             round++;
             if(round>maxRounds) return end();
-            phase="WORK"; remaining=work;
-        }
-        roundInfo.textContent=`EMOM ${round}/${maxRounds}`;
+            remaining=work;
+        } else remaining=rest;
+        roundInfo.textContent=`${round}/${maxRounds}`;
     }
 
     endTime=Date.now()+remaining*1000;
     beep(1200,.25);
     vibrate(200);
 }
-
 function pause(){
     clearInterval(timer); timer=null;
     pauseControls.style.display="flex";
     startBtn.style.display="none";
 }
-
 function resume(){
     endTime=Date.now()+remaining*1000;
     pauseControls.style.display="none";
     startBtn.style.display="block";
     timer=setInterval(tick,500);
 }
-
 function cancel(){
     clearInterval(timer); timer=null;
     remaining=duration;
@@ -314,7 +326,6 @@ function cancel(){
     startBtn.textContent="Démarrer";
     startBtn.onclick=start;
 }
-
 function end(){
     clearInterval(timer); timer=null;
     beep(1500,.5);
