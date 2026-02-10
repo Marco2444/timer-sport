@@ -1,4 +1,4 @@
-const CACHE_NAME = "timer-sport-v1";
+const CACHE_NAME = "timer-sport-v2";
 const FILES_TO_CACHE = [
   "./",
   "./index.html",
@@ -14,5 +14,13 @@ self.addEventListener("install", e => {
 self.addEventListener("fetch", e => {
   e.respondWith(
     caches.match(e.request).then(response => response || fetch(e.request))
+  );
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => caches.delete(k)))
+    )
   );
 });
