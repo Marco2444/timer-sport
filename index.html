@@ -10,30 +10,39 @@
 <meta name="theme-color" content="#111">
 
 <style>
-body {
+/* Suppression des marges par défaut */
+body, html {
     margin: 0;
+    padding: 0;
+    height: 100%;
+    overflow: hidden;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
     color: white;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
-    /* Fond d'écran personnalisé avec votre image */
+    /* Fond d'écran personnalisé (remplace le cadre noir) */
     background: url('IMG_0399.jpeg') no-repeat center center fixed;
     background-size: cover;
-    overflow: hidden;
+    background-attachment: fixed;
 }
 
-/* Conteneur sans flou */
+/* Conteneur principal sans bordure noire */
 .container {
-    background: rgba(0, 0, 0, 0.6); /* Noir semi-transparent */
+    background: rgba(0, 0, 0, 0.5); /* Noir semi-transparent */
     border-radius: 20px;
     padding: 20px;
     text-align: center;
     width: 90%;
     max-width: 420px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3); /* Ombre légère pour le relief */
 }
 
+/* Timer et texte */
 .timer {
     font-size: 80px;
     font-weight: bold;
@@ -51,6 +60,7 @@ body {
     margin-bottom: 10px;
 }
 
+/* Boutons */
 .buttons {
     display: flex;
     gap: 8px;
@@ -101,7 +111,7 @@ button.active {
     background: #e68a00;
 }
 
-/* MODAL */
+/* MODAL (inchangé) */
 .modal {
     position: fixed;
     inset: 0;
