@@ -13,26 +13,38 @@
 body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-    background: #111;
     color: white;
     display: flex;
     justify-content: center;
     align-items: center;
     height: 100vh;
+    /* Fond d'écran personnalisé avec votre image */
+    background: url('IMG_0399.jpeg') no-repeat center center fixed;
+    background-size: cover;
+    overflow: hidden;
 }
+
+/* Superposition semi-transparente pour améliorer la lisibilité */
 .container {
-    width: 100%;
-    max-width: 420px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 20px;
     padding: 20px;
     text-align: center;
+    backdrop-filter: blur(5px);
+    width: 90%;
+    max-width: 420px;
 }
+
 .timer {
     font-size: 80px;
     font-weight: bold;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
 }
 .sub {
-    color: #aaa;
+    color: #eee;
     margin: 8px 0;
+    font-size: 16px;
 }
 .round {
     font-size: 18px;
@@ -44,15 +56,21 @@ body {
     display: flex;
     gap: 8px;
     margin-bottom: 8px;
+    flex-wrap: wrap;
 }
 button {
     flex: 1;
+    min-width: 60px;
     padding: 16px;
-    font-size: 18px;
+    font-size: 16px;
     border: none;
     border-radius: 14px;
     background: #333;
     color: white;
+    transition: background 0.2s;
+}
+button:hover {
+    background: #444;
 }
 button.active {
     background: #007aff;
@@ -60,12 +78,16 @@ button.active {
 
 .start {
     background: #34c759;
-    font-size: 24px;
+    font-size: 20px;
     padding: 16px;
     border-radius: 16px;
     width: 80%;
     margin: 15px auto 0;
     display: block;
+    transition: background 0.2s;
+}
+.start:hover {
+    background: #2da846;
 }
 
 #pauseControls {
@@ -74,6 +96,10 @@ button.active {
 #pauseControls button {
     background: #ff9500;
     width: 40%;
+    margin: 0 8px;
+}
+#pauseControls button:hover {
+    background: #e68a00;
 }
 
 /* MODAL */
@@ -84,6 +110,7 @@ button.active {
     display: none;
     align-items: center;
     justify-content: center;
+    z-index: 1000;
 }
 .modalContent {
     background: #1c1c1e;
@@ -331,15 +358,16 @@ function end(){
 function openTimePicker(title,val,callback){
     cb=callback;
     pickerTitle.textContent=title;
+    picker.style.display="flex";
     timePicker.style.display="flex";
     numberPicker.style.display="none";
     fill(min,0,59,Math.floor(val/60));
     fill(sec,0,59,val%60);
-    picker.style.display="flex";
 }
 function openNumberPicker(title,minV,maxV,callback){
     cb=callback;
     pickerTitle.textContent=title;
+    picker.style.display="flex";
     timePicker.style.display="none";
     numberPicker.style.display="flex";
     number.innerHTML="";
@@ -349,7 +377,6 @@ function openNumberPicker(title,minV,maxV,callback){
         o.textContent=i;
         number.appendChild(o);
     }
-    picker.style.display="flex";
 }
 function fill(sel,a,b,v){
     sel.innerHTML="";
